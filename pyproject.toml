@@ -1,13 +1,17 @@
 [project]
 name = "pyric-static"
 version = "0.1.0"
-description = "Add your description here"
+description = "Passive Cyphal/CAN-to-InfluxDB logger (pyric influx-logger without a node)"
 readme = "README.md"
 authors = [
     { name = "Lasse Fröhner", email = "lasse@starcopter.com" }
 ]
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "influxdb-client>=1.50.0",
+    "pycyphal>=1.27.0",
+    "python-can>=4",
+]
 
 [dependency-groups]
 dev = [
@@ -26,3 +30,10 @@ build-backend = "uv_build"
 
 [tool.ruff]
 target-version = "py314"
+line-length = 110
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ty.src]
+exclude = ["tests/**"]
