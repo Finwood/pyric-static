@@ -13,6 +13,7 @@ from zoneinfo import ZoneInfo
 
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
 from .transfer_schema import TransferSchema
@@ -152,8 +153,27 @@ def delete_stop_exclusive(t_max: datetime) -> datetime:
     return t_max + timedelta(microseconds=1)
 
 
-def iter_transfer_batches(path: Path, *, batch_size: int = 10_000) -> Iterator[pa.RecordBatch]:
+def iter_transfer_batches(
+    path: Path,
+    *,
+    batch_size: int = 10_000,
+    start: datetime | None = None,
+    stop: datetime | None = None,
+) -> Iterator[pa.RecordBatch]:
     assert_transfer_schema(path)
+    if (start is None) != (stop is None):
+        raise ValueError("start and stop must both be set or both omitted")
+    if start is not None and stop is not None:
+        ts_type = TransferSchema.field("timestamp").type
+        filter_expr = (pc.field("timestamp") >= pa.scalar(start, type=ts_type)) & (
+            pc.field("timestamp") < pa.scalar(stop, type=ts_type)
+        )
+        scanner = ds.dataset(path, format="parquet").scanner(
+            filter=filter_expr,
+            batch_size=batch_size,
+        )
+        yield from scanner.to_batches()
+        return
     yield from pq.ParquetFile(path).iter_batches(batch_size=batch_size)
 
 

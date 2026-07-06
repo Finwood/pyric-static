@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from pyric_static.transfers import (
     discover_sessions,
     file_overlaps_range,
+    iter_transfer_batches,
     parse_hive_tags,
     parse_time_bound,
     scan_session_time_range,
@@ -95,6 +96,25 @@ def test_file_overlaps_range_false_when_stats_prove_no_overlap(tmp_path):
     start = datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc)
     stop = datetime(2026, 4, 18, 11, 0, 0, tzinfo=timezone.utc)
     assert file_overlaps_range(path, start, stop) is False
+
+
+def test_iter_transfer_batches_filtered_returns_window_rows_only(tmp_path):
+    path = tmp_path / "mixed.parquet"
+    write_transfer_parquet(
+        path,
+        [
+            make_transfer_row(timestamp=datetime(2026, 4, 18, 8, 0, 0, tzinfo=timezone.utc)),
+            make_transfer_row(timestamp=datetime(2026, 4, 18, 10, 0, 0, tzinfo=timezone.utc)),
+            make_transfer_row(timestamp=datetime(2026, 4, 18, 12, 0, 0, tzinfo=timezone.utc)),
+        ],
+    )
+    start = datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 4, 18, 11, 0, 0, tzinfo=timezone.utc)
+    rows = []
+    for batch in iter_transfer_batches(path, start=start, stop=stop):
+        rows.extend(batch.to_pylist())
+    assert len(rows) == 1
+    assert rows[0]["timestamp"] == datetime(2026, 4, 18, 10, 0, 0, tzinfo=timezone.utc)
 
 
 def test_scan_session_time_range(tmp_path):
