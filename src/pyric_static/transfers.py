@@ -60,19 +60,14 @@ def discover_sessions(roots: Sequence[Path]) -> dict[tuple[str, str], list[Path]
         for path in _glob_parquet_files(root):
             logger, session = parse_hive_tags(path)
             grouped[(logger, session)][path.resolve()] = path.resolve()
-    return {
-        key: sorted(files.values())
-        for key, files in sorted(grouped.items(), key=lambda kv: kv[0])
-    }
+    return {key: sorted(files.values()) for key, files in sorted(grouped.items(), key=lambda kv: kv[0])}
 
 
 def assert_transfer_schema(path: Path) -> None:
     schema = pq.read_schema(path)
     if not schema.equals(TransferSchema):
         raise ValueError(
-            f"{path}: transfer parquet schema mismatch\n"
-            f"expected: {TransferSchema}\n"
-            f"actual:   {schema}"
+            f"{path}: transfer parquet schema mismatch\nexpected: {TransferSchema}\nactual:   {schema}"
         )
 
 
@@ -86,8 +81,8 @@ def scan_session_time_range(files: Sequence[Path]) -> tuple[datetime, datetime]:
         if table.num_rows == 0:
             continue
         col = table.column("timestamp")
-        batch_min = pc.min(col).as_py()
-        batch_max = pc.max(col).as_py()
+        batch_min = pc.min(col).as_py()  # ty: ignore[unresolved-attribute]
+        batch_max = pc.max(col).as_py()  # ty: ignore[unresolved-attribute]
         if batch_min is None or batch_max is None:
             continue
         t_min = batch_min if t_min is None else min(t_min, batch_min)

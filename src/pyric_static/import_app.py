@@ -138,7 +138,7 @@ class ImportRunner:
 
         payload = trim_payload(row.get("payload"), row.get("length"))
         try:
-            message: Any = pycyphal.dsdl.deserialize(port_spec.dtype, payload)
+            message: Any = pycyphal.dsdl.deserialize(port_spec.dtype, [memoryview(payload)])
         except Exception:
             self.stats.metrics.note_deserialize_failed(port_spec.type_str)
             _logger.exception("deserialize failed for %s on node %s", port_spec.type_str, src)
