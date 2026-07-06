@@ -16,7 +16,7 @@ from typing import Any, cast
 
 import pycyphal.dsdl
 from influxdb_client import InfluxDBClient, Point, WriteOptions, WritePrecision
-from influxdb_client.client.write_api import SYNCHRONOUS, WriteApi
+from influxdb_client.client.write_api import WriteApi
 
 from .config import Config, NodeMeta
 from .dsdl import PortSpec
@@ -61,7 +61,9 @@ class InfluxWriter:
         client = InfluxDBClient.from_env_properties()
         if client.default_tags is None:
             client.default_tags = {}
-        writer = client.write_api(write_options=SYNCHRONOUS)
+        writer = client.write_api(
+            write_options=WriteOptions(batch_size=1000, flush_interval=4000, jitter_interval=2000)
+        )
         _logger.info(
             "Influx import writer ready: url=%s org=%s bucket=%s",
             client.url,
