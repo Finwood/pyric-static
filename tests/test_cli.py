@@ -51,3 +51,10 @@ def test_main_replay_and_live_conflict(tmp_path: Path):
                 "can0",
             ]
         )
+
+
+def test_main_live_requires_logger_section(tmp_path: Path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[[nodes]]\nid = 11\n")
+    with pytest.raises(SystemExit, match="\\[logger\\]"):
+        main(["--config", str(cfg), "--interface", "socketcan", "--channel", "can0"])

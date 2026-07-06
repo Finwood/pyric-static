@@ -91,6 +91,10 @@ def main(argv: list[str] | None = None) -> int:
     _install_logging(args.log_level)
     try:
         cfg = load(args.config)
+        if cfg.logger is None:
+            raise SystemExit(
+                "live/replay mode requires a [logger] section in the config (name and iface tags for Influx)"
+            )
         source = _build_source(args)
         PassiveLogger(cfg, source, dry_run=args.dry_run).run()
         return 0

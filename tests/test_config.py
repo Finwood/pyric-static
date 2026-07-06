@@ -141,3 +141,20 @@ path = "x.log"
     )
     with pytest.raises(ValueError, match="obsolete"):
         load(p)
+
+
+def test_load_without_logger_section(tmp_path: Path):
+    p = _write(
+        tmp_path,
+        """
+[[nodes]]
+id = 11
+[[nodes.ports]]
+id = 113
+name = "analog_inputs"
+type = "uavcan.node.Heartbeat.1.0"
+""",
+    )
+    cfg = load(p)
+    assert cfg.logger is None
+    assert (11, 113) in cfg.explicit_ports

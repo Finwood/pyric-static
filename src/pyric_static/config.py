@@ -6,6 +6,10 @@ subjects. Standard fixed-subject messages (heartbeat, time sync, ...) are
 implicit and do not appear in the file.
 
 Frame source (replay path or live bus) is configured on the CLI, not here.
+
+The optional ``[logger]`` section supplies Influx ``logger`` / ``iface`` default tags
+for live and replay mode. Batch import mode omits it and derives those tags from
+transfer hive metadata instead.
 """
 
 from __future__ import annotations
@@ -43,7 +47,7 @@ class NodeMeta:
 
 @dataclass
 class Config:
-    logger: LoggerSection
+    logger: LoggerSection | None
     influx: InfluxSection
     nodes: dict[int, NodeMeta]
     # Explicit (node_id, port_id) entries from [[nodes.ports]].
@@ -66,8 +70,10 @@ class Config:
         return self.standard_ports.get(port_id)
 
 
-def _parse_logger(raw: dict[str, Any]) -> LoggerSection:
-    lg = raw.get("logger") or {}
+def _parse_logger(raw: dict[str, Any]) -> LoggerSection | None:
+    if "logger" not in raw:
+        return None
+    lg = raw["logger"] or {}
     name = lg.get("name") or f"pyric-{platform.node()}"
     iface = lg.get("iface") or "unknown"
     return LoggerSection(name=name, iface=iface)

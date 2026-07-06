@@ -42,7 +42,7 @@ InfluxDB.
 | Reassembly | `CANTracer` | None (already reassembled) |
 | DSDL resolution | TOML `[[nodes]]` / implicit standard ports | Same |
 | Influx schema | pyric `NodeExplorer` layout | Same, plus `session` tag |
-| `logger` / `iface` tags | From TOML `[logger]` section | From hive partition / transfer `channel` |
+| `logger` / `iface` tags | From TOML `[logger]` section (required) | From hive partition / transfer `channel` |
 | Idempotency | N/A (streaming) | Scoped delete + re-upload per session |
 
 ## Goals
@@ -101,7 +101,9 @@ InfluxDB (pyric schema + session tag)
 
 | Module | Change |
 | --- | --- |
-| `influx.py` | Accept optional `session` tag on writes; add `delete_session(logger, session, start, stop)` |
+| `config.py` | `Config.logger` is `LoggerSection \| None`; omit `[logger]` → `None` |
+| `cli.py` | Live/replay exits if `cfg.logger is None` |
+| `influx.py` | Accept optional `session` tag on writes; add `delete_session(...)`; `from_config` requires `[logger]` |
 | `pyproject.toml` | Add `pyarrow` dependency |
 
 ### Unchanged
@@ -148,7 +150,7 @@ pyric-static import --config pyric-static.toml /mnt/data/transfers --dry-run
 
 | Argument | Required | Description |
 | --- | --- | --- |
-| `--config` | yes | Path to TOML (`[[nodes]]`, `[influx]`; `[logger]` ignored) |
+| `--config` | yes | Path to TOML (`[[nodes]]`, `[influx]`; `[logger]` optional) |
 | `ROOT ...` | yes | One or more positional hive roots (`nargs="+"`); shell expansion works |
 | `--dry-run` | no | Decode and count; no delete, no write |
 | `--log-level` | no | Same as live mode (default `INFO`) |
@@ -173,11 +175,21 @@ Logger and session values are parsed from directory names:
 
 ## Configuration
 
-Reuse the existing TOML format unchanged:
+Reuse the existing TOML format. The `[logger]` section is **optional** at load
+time (`Config.logger` is `None` when omitted).
 
-- `[[nodes]]` / `[[nodes.ports]]` — DSDL type mappings (required for vendor ports).
-- `[influx]` — bucket name (default `pyric`).
-- `[logger]` — **ignored** in import mode (tags come from data).
+| Section | Import mode | Live / replay mode |
+| --- | --- | --- |
+| `[[nodes]]` / `[[nodes.ports]]` | Required for vendor port DSDL mappings | Same |
+| `[influx]` | Optional (bucket default `pyric`) | Same |
+| `[logger]` | Omit — tags derived from hive / transfer rows | **Required** — CLI exits with an error if missing |
+
+When `[logger]` is present, `name` and `iface` default to `pyric-{hostname}` and
+`unknown` respectively (unchanged from today).
+
+Live and replay entrypoints validate `cfg.logger is not None` before starting
+`PassiveLogger`. Import mode does not use `InfluxWriter.from_config`; it sets
+`logger`, `session`, and `iface` per point from parquet/hive metadata.
 
 Influx connection uses standard `INFLUXDB_V2_*` environment variables (same as live
 mode).

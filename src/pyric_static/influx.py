@@ -32,13 +32,16 @@ class InfluxWriter:
 
     @classmethod
     def from_config(cls, cfg: Config) -> "InfluxWriter":
+        if cfg.logger is None:
+            raise ValueError("InfluxWriter.from_config requires a [logger] section")
         client = InfluxDBClient.from_env_properties()
         if client.default_tags is None:
             client.default_tags = {}
         assert isinstance(client.default_tags, dict)
+        logger = cfg.logger
         client.default_tags |= {
-            "logger": cfg.logger.name,
-            "iface": cfg.logger.iface,
+            "logger": logger.name,
+            "iface": logger.iface,
         }
         writer = client.write_api(
             write_options=WriteOptions(batch_size=1000, flush_interval=4000, jitter_interval=2000)
