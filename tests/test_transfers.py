@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 from pyric_static.transfers import (
     discover_sessions,
+    file_overlaps_range,
     parse_hive_tags,
     parse_time_bound,
     scan_session_time_range,
@@ -72,6 +73,28 @@ def test_discover_sessions_dedupes_across_roots(tmp_path):
     path = root / "logger=L" / "session=S" / "a.parquet"
     sessions = discover_sessions([root, path.parent])
     assert len(sessions[("L", "S")]) == 1
+
+
+def test_file_overlaps_range_true_when_rows_inside_window(tmp_path):
+    path = tmp_path / "inside.parquet"
+    write_transfer_parquet(
+        path,
+        [make_transfer_row(timestamp=datetime(2026, 4, 18, 10, 0, 0, tzinfo=timezone.utc))],
+    )
+    start = datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 4, 18, 11, 0, 0, tzinfo=timezone.utc)
+    assert file_overlaps_range(path, start, stop) is True
+
+
+def test_file_overlaps_range_false_when_stats_prove_no_overlap(tmp_path):
+    path = tmp_path / "outside.parquet"
+    write_transfer_parquet(
+        path,
+        [make_transfer_row(timestamp=datetime(2026, 4, 18, 8, 0, 0, tzinfo=timezone.utc))],
+    )
+    start = datetime(2026, 4, 18, 9, 0, 0, tzinfo=timezone.utc)
+    stop = datetime(2026, 4, 18, 11, 0, 0, tzinfo=timezone.utc)
+    assert file_overlaps_range(path, start, stop) is False
 
 
 def test_scan_session_time_range(tmp_path):

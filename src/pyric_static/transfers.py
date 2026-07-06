@@ -96,6 +96,37 @@ def assert_transfer_schema(path: Path) -> None:
         )
 
 
+def _timestamp_column_index(schema: pa.Schema) -> int:
+    return schema.get_field_index("timestamp")
+
+
+def file_overlaps_range(path: Path, start: datetime, stop: datetime) -> bool:
+    """Return False only when row-group stats prove no row in [start, stop)."""
+    assert_transfer_schema(path)
+    pf = pq.ParquetFile(path)
+    metadata = pf.metadata
+    if metadata is None or metadata.num_row_groups == 0:
+        return True
+    ts_index = _timestamp_column_index(pf.schema_arrow)
+    saw_stats = False
+    for rg in range(metadata.num_row_groups):
+        col_meta = metadata.row_group(rg).column(ts_index)
+        stats = col_meta.statistics
+        if stats is None or not stats.has_min_max:
+            return True
+        saw_stats = True
+        ts_type = TransferSchema.field("timestamp").type
+        rg_min = pa.scalar(stats.min, type=ts_type).as_py()
+        rg_max = pa.scalar(stats.max, type=ts_type).as_py()
+        if rg_max >= start and rg_min < stop:
+            return True
+    return not saw_stats
+
+
+def filter_session_files(files: Sequence[Path], start: datetime, stop: datetime) -> list[Path]:
+    return [path for path in files if file_overlaps_range(path, start, stop)]
+
+
 def scan_session_time_range(files: Sequence[Path]) -> tuple[datetime, datetime]:
     """Return [t_min, t_max] across all rows in the given parquet files."""
     t_min: datetime | None = None
