@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import load
+from .import_app import ImportRunner
 from .logger_app import PassiveLogger
 from .sources import LiveSource, ReplaySource
 
@@ -53,7 +54,7 @@ def _install_logging(level: str) -> None:
     )
 
 
-def main(argv: list[str] | None = None) -> int:
+def live_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pyric-static")
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument("--config", required=True, help="path to TOML config (logger, influx, nodes)")
@@ -101,6 +102,30 @@ def main(argv: list[str] | None = None) -> int:
     except Exception:  # noqa: BLE001
         logging.getLogger("pyric_static").exception("fatal error")
         return 1
+
+
+def import_main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(prog="pyric-static import")
+    parser.add_argument("--log-level", default="INFO")
+    parser.add_argument("--config", required=True, type=Path, help="path to TOML config (influx, nodes)")
+    parser.add_argument("--dry-run", action="store_true", help="decode messages but do not delete or write to Influx")
+    parser.add_argument("roots", nargs="+", type=Path, help="hive root(s) containing transfer parquet files")
+    args = parser.parse_args(argv)
+    _install_logging(args.log_level)
+    try:
+        cfg = load(args.config)
+        stats = ImportRunner(cfg, roots=list(args.roots), dry_run=args.dry_run).run()
+        return 1 if stats.failed_sessions else 0
+    except Exception:  # noqa: BLE001
+        logging.getLogger("pyric_static").exception("fatal error")
+        return 1
+
+
+def main(argv: list[str] | None = None) -> int:
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if argv and argv[0] == "import":
+        return import_main(argv[1:])
+    return live_main(argv)
 
 
 if __name__ == "__main__":
