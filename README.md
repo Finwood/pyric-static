@@ -128,6 +128,21 @@ pyric-static import --config pyric-static.toml /mnt/data/transfers
 pyric-static import --config pyric-static.toml /mnt/a /mnt/b --dry-run
 ```
 
+Optional time window (both flags required; bounds are `[start, stop)` in UTC after parsing):
+
+```bash
+# Single local calendar day
+pyric-static import --config pyric-static.toml \
+  --start 2026-04-18 --stop 2026-04-19 /mnt/data/transfers
+
+# Sub-day window (ISO 8601; naive values use local timezone)
+pyric-static import --config pyric-static.toml \
+  --start 2026-04-18T08:00:00 --stop 2026-04-18T12:00:00 /mnt/data/transfers
+```
+
+Date-only values map to `00:00:00` local on that date. Filtered import deletes and
+re-uploads only within the window (idempotent partial re-import).
+
 Before uploading each `(logger, session)`, existing Influx points with matching tags
 in the parquet time range are deleted. Only `Message` transfers are written (same
 as live mode).
