@@ -6,8 +6,10 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import cast
+from zoneinfo import ZoneInfo
 
 import pyarrow as pa
 import pyarrow.compute as pc
@@ -19,6 +21,29 @@ _logger = logging.getLogger(__name__)
 
 _LOGGER_RE = re.compile(r"^logger=(.+)$", re.IGNORECASE)
 _SESSION_RE = re.compile(r"^session=(.+)$", re.IGNORECASE)
+
+
+def _local_tz() -> ZoneInfo:
+    return cast(ZoneInfo, datetime.now().astimezone().tzinfo or timezone.utc)
+
+
+def parse_time_bound(value: str) -> datetime:
+    """Parse an ISO 8601 CLI time bound; normalize to UTC."""
+    text = value.strip()
+    if not text:
+        raise ValueError(f"invalid time bound: {value!r}")
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            dt = datetime.fromisoformat(text).replace(tzinfo=_local_tz())
+        else:
+            dt = datetime.fromisoformat(text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_local_tz())
+    except ValueError as exc:
+        raise ValueError(f"invalid time bound: {value!r}") from exc
+    return dt.astimezone(timezone.utc)
 
 
 def parse_hive_tags(path: Path) -> tuple[str, str]:
