@@ -6,11 +6,14 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from typing import cast
+from zoneinfo import ZoneInfo
 
 import pyarrow as pa
 import pyarrow.compute as pc
+import pyarrow.dataset as ds
 import pyarrow.parquet as pq
 
 from .transfer_schema import TransferSchema
@@ -19,6 +22,29 @@ _logger = logging.getLogger(__name__)
 
 _LOGGER_RE = re.compile(r"^logger=(.+)$", re.IGNORECASE)
 _SESSION_RE = re.compile(r"^session=(.+)$", re.IGNORECASE)
+
+
+def _local_tz() -> ZoneInfo:
+    return cast(ZoneInfo, datetime.now().astimezone().tzinfo or timezone.utc)
+
+
+def parse_time_bound(value: str) -> datetime:
+    """Parse an ISO 8601 CLI time bound; normalize to UTC."""
+    text = value.strip()
+    if not text:
+        raise ValueError(f"invalid time bound: {value!r}")
+    if text.endswith("Z"):
+        text = f"{text[:-1]}+00:00"
+    try:
+        if len(text) == 10 and text[4] == "-" and text[7] == "-":
+            dt = datetime.fromisoformat(text).replace(tzinfo=_local_tz())
+        else:
+            dt = datetime.fromisoformat(text)
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=_local_tz())
+    except ValueError as exc:
+        raise ValueError(f"invalid time bound: {value!r}") from exc
+    return dt.astimezone(timezone.utc)
 
 
 def parse_hive_tags(path: Path) -> tuple[str, str]:
@@ -71,6 +97,37 @@ def assert_transfer_schema(path: Path) -> None:
         )
 
 
+def _timestamp_column_index(schema: pa.Schema) -> int:
+    return schema.get_field_index("timestamp")
+
+
+def file_overlaps_range(path: Path, start: datetime, stop: datetime) -> bool:
+    """Return False only when row-group stats prove no row in [start, stop)."""
+    assert_transfer_schema(path)
+    pf = pq.ParquetFile(path)
+    metadata = pf.metadata
+    if metadata is None or metadata.num_row_groups == 0:
+        return True
+    ts_index = _timestamp_column_index(pf.schema_arrow)
+    saw_stats = False
+    for rg in range(metadata.num_row_groups):
+        col_meta = metadata.row_group(rg).column(ts_index)
+        stats = col_meta.statistics
+        if stats is None or not stats.has_min_max:
+            return True
+        saw_stats = True
+        ts_type = TransferSchema.field("timestamp").type
+        rg_min = pa.scalar(stats.min, type=ts_type).as_py()
+        rg_max = pa.scalar(stats.max, type=ts_type).as_py()
+        if rg_max >= start and rg_min < stop:
+            return True
+    return not saw_stats
+
+
+def filter_session_files(files: Sequence[Path], start: datetime, stop: datetime) -> list[Path]:
+    return [path for path in files if file_overlaps_range(path, start, stop)]
+
+
 def scan_session_time_range(files: Sequence[Path]) -> tuple[datetime, datetime]:
     """Return [t_min, t_max] across all rows in the given parquet files."""
     t_min: datetime | None = None
@@ -96,8 +153,27 @@ def delete_stop_exclusive(t_max: datetime) -> datetime:
     return t_max + timedelta(microseconds=1)
 
 
-def iter_transfer_batches(path: Path, *, batch_size: int = 10_000) -> Iterator[pa.RecordBatch]:
+def iter_transfer_batches(
+    path: Path,
+    *,
+    batch_size: int = 10_000,
+    start: datetime | None = None,
+    stop: datetime | None = None,
+) -> Iterator[pa.RecordBatch]:
     assert_transfer_schema(path)
+    if (start is None) != (stop is None):
+        raise ValueError("start and stop must both be set or both omitted")
+    if start is not None and stop is not None:
+        ts_type = TransferSchema.field("timestamp").type
+        filter_expr = (pc.field("timestamp") >= pa.scalar(start, type=ts_type)) & (
+            pc.field("timestamp") < pa.scalar(stop, type=ts_type)
+        )
+        scanner = ds.dataset(path, format="parquet").scanner(
+            filter=filter_expr,
+            batch_size=batch_size,
+        )
+        yield from scanner.to_batches()
+        return
     yield from pq.ParquetFile(path).iter_batches(batch_size=batch_size)
 
 

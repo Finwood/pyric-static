@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +16,7 @@ from .metrics import RunMetrics
 from .transfers import (
     delete_stop_exclusive,
     discover_sessions,
+    filter_session_files,
     iter_transfer_batches,
     scan_session_time_range,
     timestamp_to_ns,
@@ -40,10 +42,18 @@ class ImportRunner:
         *,
         roots: list[Path],
         dry_run: bool = False,
+        start: datetime | None = None,
+        stop: datetime | None = None,
     ) -> None:
+        if (start is None) != (stop is None):
+            raise ValueError("start and stop must both be set or both omitted")
+        if start is not None and stop is not None and start >= stop:
+            raise ValueError("start must be before stop")
         self.cfg = cfg
         self.roots = roots
         self.dry_run = dry_run
+        self.start = start
+        self.stop = stop
         self.stats = ImportStats()
         self.writer: InfluxWriter | None = None
 
@@ -60,7 +70,6 @@ class ImportRunner:
             for (logger, session), files in sessions.items():
                 try:
                     self._import_session(logger, session, files)
-                    self.stats.sessions += 1
                 except Exception:
                     self.stats.failed_sessions += 1
                     _logger.exception("session failed: logger=%s session=%s", logger, session)
@@ -81,8 +90,22 @@ class ImportRunner:
         return self.stats
 
     def _import_session(self, logger: str, session: str, files: list[Path]) -> None:
-        t_min, t_max = scan_session_time_range(files)
-        t_stop = delete_stop_exclusive(t_max)
+        if self.start is not None and self.stop is not None:
+            files = filter_session_files(files, self.start, self.stop)
+            if not files:
+                _logger.info(
+                    "skip session (no files overlap window): logger=%s session=%s start=%s stop=%s",
+                    logger,
+                    session,
+                    self.start.isoformat(),
+                    self.stop.isoformat(),
+                )
+                return
+            t_min, t_max, t_stop = self.start, self.stop, self.stop
+        else:
+            t_min, t_max = scan_session_time_range(files)
+            t_stop = delete_stop_exclusive(t_max)
+
         session_written = 0
         session_skipped = 0
 
@@ -99,8 +122,12 @@ class ImportRunner:
             assert self.writer is not None
             self.writer.delete_range(logger=logger, session=session, start=t_min, stop=t_stop)
 
+        read_kwargs: dict = {}
+        if self.start is not None and self.stop is not None:
+            read_kwargs = {"start": self.start, "stop": self.stop}
+
         for path in files:
-            for batch in iter_transfer_batches(path):
+            for batch in iter_transfer_batches(path, **read_kwargs):
                 for row in batch.to_pylist():
                     written, skipped = self._handle_row(logger, session, row)
                     session_written += written
@@ -108,6 +135,7 @@ class ImportRunner:
 
         self.stats.written += session_written
         self.stats.skipped_non_message += session_skipped
+        self.stats.sessions += 1
 
         m = self.stats.metrics
         _logger.info(
