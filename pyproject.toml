@@ -16,6 +16,7 @@ dependencies = [
 
 [dependency-groups]
 dev = [
+    "cyphal-device-library",
     "prek>=0.3.9",
     "pytest>=9.0.3",
     "ruff>=0.15.11",
@@ -38,3 +39,6 @@ testpaths = ["tests"]
 
 [tool.ty.src]
 exclude = ["tests/**"]
+
+[tool.uv.sources]
+cyphal-device-library = { git = "ssh://git@github.com/starcopter/cyphal-device-library.git" }
