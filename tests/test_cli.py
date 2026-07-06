@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
 
-from pyric_static.cli import _build_source, main
+from pyric_static.cli import _build_source, import_main, main
 from pyric_static.sources import LiveSource, ReplaySource
 
 
@@ -73,9 +74,11 @@ def test_main_import_dispatches(tmp_path: Path, monkeypatch):
     called: dict = {}
 
     class FakeRunner:
-        def __init__(self, _cfg, *, roots, dry_run):
+        def __init__(self, _cfg, *, roots, dry_run, start=None, stop=None):
             called["roots"] = roots
             called["dry_run"] = dry_run
+            called["start"] = start
+            called["stop"] = stop
 
         def run(self):
             class R:
@@ -88,3 +91,51 @@ def test_main_import_dispatches(tmp_path: Path, monkeypatch):
     assert rc == 0
     assert called["dry_run"] is True
     assert called["roots"] == [hive]
+    assert called["start"] is None
+    assert called["stop"] is None
+
+
+def test_import_requires_start_and_stop_together(tmp_path: Path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[influx]\nbucket = 'pyric'\n")
+    hive = tmp_path / "logger=L" / "session=S"
+    hive.mkdir(parents=True)
+    with pytest.raises(SystemExit):
+        import_main(["--config", str(cfg), "--start", "2026-04-18", str(hive)])
+
+
+def test_import_forwards_time_bounds(tmp_path: Path, monkeypatch):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[influx]\nbucket = 'pyric'\n")
+    hive = tmp_path / "logger=L" / "session=S"
+    hive.mkdir(parents=True)
+    called: dict = {}
+
+    class FakeRunner:
+        def __init__(self, _cfg, *, roots, dry_run, start, stop):
+            called["roots"] = roots
+            called["dry_run"] = dry_run
+            called["start"] = start
+            called["stop"] = stop
+
+        def run(self):
+            class R:
+                failed_sessions = 0
+
+            return R()
+
+    monkeypatch.setattr("pyric_static.cli.ImportRunner", FakeRunner)
+    rc = import_main(
+        [
+            "--config",
+            str(cfg),
+            "--start",
+            "2026-04-18T08:00:00Z",
+            "--stop",
+            "2026-04-18T12:00:00Z",
+            str(hive),
+        ]
+    )
+    assert rc == 0
+    assert called["start"] == datetime(2026, 4, 18, 8, 0, 0, tzinfo=timezone.utc)
+    assert called["stop"] == datetime(2026, 4, 18, 12, 0, 0, tzinfo=timezone.utc)

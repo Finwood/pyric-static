@@ -12,6 +12,7 @@ from .config import load
 from .import_app import ImportRunner
 from .logger_app import PassiveLogger
 from .sources import LiveSource, ReplaySource
+from .transfers import parse_time_bound
 
 
 def _parse_bus_arg(spec: str) -> tuple[str, Any]:
@@ -112,11 +113,35 @@ def import_main(argv: list[str] | None = None) -> int:
         "--dry-run", action="store_true", help="decode messages but do not delete or write to Influx"
     )
     parser.add_argument("roots", nargs="+", type=Path, help="hive root(s) containing transfer parquet files")
+    parser.add_argument(
+        "--start",
+        type=parse_time_bound,
+        default=None,
+        metavar="TIME",
+        help="inclusive lower bound (ISO 8601; date-only = local midnight); requires --stop",
+    )
+    parser.add_argument(
+        "--stop",
+        type=parse_time_bound,
+        default=None,
+        metavar="TIME",
+        help="exclusive upper bound (ISO 8601; date-only = local midnight); requires --start",
+    )
     args = parser.parse_args(argv)
+    if (args.start is None) != (args.stop is None):
+        parser.error("--start and --stop must be given together")
+    if args.start is not None and args.start >= args.stop:
+        parser.error("--start must be before --stop")
     _install_logging(args.log_level)
     try:
         cfg = load(args.config)
-        stats = ImportRunner(cfg, roots=list(args.roots), dry_run=args.dry_run).run()
+        stats = ImportRunner(
+            cfg,
+            roots=list(args.roots),
+            dry_run=args.dry_run,
+            start=args.start,
+            stop=args.stop,
+        ).run()
         return 1 if stats.failed_sessions else 0
     except Exception:  # noqa: BLE001
         logging.getLogger("pyric_static").exception("fatal error")
