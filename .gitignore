@@ -11,5 +11,9 @@ wheels/
 
 # Local configuration
 .env
-pyric-static.toml
 data/
+config/
+
+# Editor & IDE
+.vscode/
+.cursor/
