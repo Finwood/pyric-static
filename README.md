@@ -117,6 +117,21 @@ pyric-static --config pyric-static.toml -i socketcan -c can0 --bus-arg bitrate=1
 
 Ctrl+C cleanly flushes the Influx batch and shuts down.
 
+## Import CANedge transfer parquet
+
+Batch-upload pre-assembled transfer parquet from the frame-decoding pipeline hive
+layout. Omit `[logger]` in the config — `logger`, `session`, and `iface` tags come
+from the hive partitions and each transfer's `channel` field.
+
+```bash
+pyric-static import --config pyric-static.toml /mnt/data/transfers
+pyric-static import --config pyric-static.toml /mnt/a /mnt/b --dry-run
+```
+
+Before uploading each `(logger, session)`, existing Influx points with matching tags
+in the parquet time range are deleted. Only `Message` transfers are written (same
+as live mode).
+
 ## Tests
 
 ```bash

@@ -8,6 +8,11 @@ from pyric_static.cli import _build_source, main
 from pyric_static.sources import LiveSource, ReplaySource
 
 
+@pytest.fixture(autouse=True)
+def _stub_standard_ports(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("pyric_static.config.build_standard_ports", lambda: {})
+
+
 def test_build_source_replay():
     class A:
         replay = Path("a.log")
@@ -58,3 +63,28 @@ def test_main_live_requires_logger_section(tmp_path: Path):
     cfg.write_text("[[nodes]]\nid = 11\n")
     with pytest.raises(SystemExit, match="\\[logger\\]"):
         main(["--config", str(cfg), "--interface", "socketcan", "--channel", "can0"])
+
+
+def test_main_import_dispatches(tmp_path: Path, monkeypatch):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[influx]\nbucket = 'pyric'\n")
+    hive = tmp_path / "logger=L" / "session=S"
+    hive.mkdir(parents=True)
+    called: dict = {}
+
+    class FakeRunner:
+        def __init__(self, _cfg, *, roots, dry_run):
+            called["roots"] = roots
+            called["dry_run"] = dry_run
+
+        def run(self):
+            class R:
+                failed_sessions = 0
+
+            return R()
+
+    monkeypatch.setattr("pyric_static.cli.ImportRunner", FakeRunner)
+    rc = main(["import", "--config", str(cfg), str(hive), "--dry-run"])
+    assert rc == 0
+    assert called["dry_run"] is True
+    assert called["roots"] == [hive]

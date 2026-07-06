@@ -11,11 +11,12 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, cast
 
 import pycyphal.dsdl
 from influxdb_client import InfluxDBClient, Point, WriteOptions, WritePrecision
-from influxdb_client.client.write_api import WriteApi
+from influxdb_client.client.write_api import SYNCHRONOUS, WriteApi
 
 from .config import Config, NodeMeta
 from .dsdl import PortSpec
@@ -55,6 +56,44 @@ class InfluxWriter:
         )
         return cls(bucket=cfg.influx.bucket, client=client, writer=writer)
 
+    @classmethod
+    def from_import(cls, cfg: Config) -> "InfluxWriter":
+        client = InfluxDBClient.from_env_properties()
+        if client.default_tags is None:
+            client.default_tags = {}
+        writer = client.write_api(write_options=SYNCHRONOUS)
+        _logger.info(
+            "Influx import writer ready: url=%s org=%s bucket=%s",
+            client.url,
+            client.org,
+            cfg.influx.bucket,
+        )
+        return cls(bucket=cfg.influx.bucket, client=client, writer=writer)
+
+    def delete_range(
+        self,
+        *,
+        logger: str,
+        session: str,
+        start: datetime,
+        stop: datetime,
+    ) -> None:
+        predicate = f'logger="{logger}" AND session="{session}"'
+        self.client.delete_api().delete(
+            start=start,
+            stop=stop,
+            predicate=predicate,
+            bucket=self.bucket,
+            org=self.client.org,
+        )
+        _logger.info(
+            "Influx delete: logger=%s session=%s start=%s stop=%s",
+            logger,
+            session,
+            start.isoformat(),
+            stop.isoformat(),
+        )
+
     def close(self) -> None:
         try:
             self.writer.close()
@@ -74,12 +113,16 @@ class InfluxWriter:
         message: Any,
         timestamp_ns: int,
         node_meta: NodeMeta | None,
+        *,
+        import_tags: dict[str, str] | None = None,
     ) -> None:
         tags: dict[str, Any] = {
             "node_id": source_node_id if source_node_id is not None else "anonymous",
             "port_id": spec.port_id,
             "port_name": spec.port_name,
         }
+        if import_tags is not None:
+            tags.update(import_tags)
         if node_meta is not None:
             if node_meta.name:
                 tags["app_name"] = node_meta.name

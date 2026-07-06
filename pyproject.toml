@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.14"
 dependencies = [
     "influxdb-client>=1.50.0",
+    "pyarrow>=19",
     "pycyphal>=1.27.0",
     "python-can>=4",
 ]

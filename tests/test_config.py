@@ -2,6 +2,8 @@ from pathlib import Path
 
 import pytest
 
+pytest.importorskip("uavcan.node")
+
 from pyric_static.config import Config, load
 
 
