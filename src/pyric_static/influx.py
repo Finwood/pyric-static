@@ -4,7 +4,7 @@
 - tags: node_id, port_id, port_name, optional app_name/device_uid, default tags logger/iface
 - fields: flatten(to_builtin(msg)) with bool -> int
 - timestamp: nanoseconds
-- WriteOptions: batch_size=1000, flush_interval=4000, jitter_interval=2000
+- WriteOptions: batch_size=1000 (live logger), batch_size=10_000 (import)
 """
 
 from __future__ import annotations
@@ -61,13 +61,13 @@ class InfluxWriter:
 
     @classmethod
     def from_import(cls, cfg: Config) -> "InfluxWriter":
-        client = InfluxDBClient.from_env_properties()
+        client = InfluxDBClient.from_env_properties(enable_gzip=True)
         if client.conf.timeout is None or client.conf.timeout < _IMPORT_TIMEOUT_MS:
             client.conf.timeout = _IMPORT_TIMEOUT_MS
         if client.default_tags is None:
             client.default_tags = {}
         writer = client.write_api(
-            write_options=WriteOptions(batch_size=1000, flush_interval=4000, jitter_interval=2000)
+            write_options=WriteOptions(batch_size=10_000, flush_interval=4000, jitter_interval=2000)
         )
         _logger.info(
             "Influx import writer ready: url=%s org=%s bucket=%s",

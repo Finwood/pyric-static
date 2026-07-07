@@ -9,6 +9,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import pyarrow as pa
 import pycyphal.dsdl
 
 from .config import Config, NodeMeta, load
@@ -20,7 +21,6 @@ from .transfers import (
     filter_session_files,
     iter_transfer_batches,
     scan_session_time_range,
-    timestamp_to_ns,
     trim_payload,
 )
 
@@ -105,7 +105,7 @@ def _handle_row(
         spec=port_spec,
         source_node_id=src,
         message=message,
-        timestamp_ns=timestamp_to_ns(row["timestamp"]),
+        timestamp_ns=row["timestamp"] * 1000,
         node_meta=node_meta,
         import_tags={"logger": logger, "session": session, "iface": str(channel)},
     )
@@ -161,6 +161,11 @@ def _import_session(
 
     for path in files:
         for batch in iter_transfer_batches(path, **read_kwargs):
+            batch = batch.set_column(
+                batch.schema.get_field_index("timestamp"),
+                "timestamp",
+                batch.column("timestamp").cast(pa.int64()),
+            )
             for row in batch.to_pylist():
                 written, skipped = _handle_row(
                     cfg,
