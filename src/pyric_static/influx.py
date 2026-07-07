@@ -24,6 +24,9 @@ from .flatten import flatten
 
 _logger = logging.getLogger(__name__)
 
+# Delete API calls can exceed the InfluxDB client's default 10s timeout under load.
+_IMPORT_TIMEOUT_MS = 120_000
+
 
 @dataclass
 class InfluxWriter:
@@ -59,6 +62,8 @@ class InfluxWriter:
     @classmethod
     def from_import(cls, cfg: Config) -> "InfluxWriter":
         client = InfluxDBClient.from_env_properties()
+        if client.conf.timeout is None or client.conf.timeout < _IMPORT_TIMEOUT_MS:
+            client.conf.timeout = _IMPORT_TIMEOUT_MS
         if client.default_tags is None:
             client.default_tags = {}
         writer = client.write_api(

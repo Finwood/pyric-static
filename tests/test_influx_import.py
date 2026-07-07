@@ -17,6 +17,7 @@ def import_writer():
         client.url = "http://localhost:8086"
         client.org = "org"
         client.default_tags = {}
+        client.conf = MagicMock(timeout=10_000)
         mock_cls.from_env_properties.return_value = client
         writer_api = MagicMock()
         client.write_api.return_value = writer_api
@@ -34,6 +35,11 @@ def import_writer():
 def test_from_import_sets_no_default_tags(import_writer):
     writer, _write_api, _delete_api = import_writer
     assert writer.client.default_tags == {}
+
+
+def test_from_import_uses_extended_timeout(import_writer):
+    writer, _write_api, _delete_api = import_writer
+    assert writer.client.conf.timeout == 120_000
 
 
 def test_delete_range_calls_delete_api(import_writer):
