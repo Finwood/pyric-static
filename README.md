@@ -126,7 +126,10 @@ from the hive partitions and each transfer's `channel` field.
 ```bash
 pyric-static import --config pyric-static.toml /mnt/data/transfers
 pyric-static import --config pyric-static.toml /mnt/a /mnt/b --dry-run
+pyric-static import --config pyric-static.toml --jobs 8 /mnt/data/transfers
 ```
+
+Parallel import runs one worker per `(logger, session)` partition (default worker count: CPU cores). Each worker opens its own Influx connection.
 
 Optional time window (both flags required; bounds are `[start, stop)` in UTC after parsing):
 

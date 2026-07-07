@@ -74,11 +74,13 @@ def test_main_import_dispatches(tmp_path: Path, monkeypatch):
     called: dict = {}
 
     class FakeRunner:
-        def __init__(self, _cfg, *, roots, dry_run, start=None, stop=None):
+        def __init__(self, _cfg, *, roots, config_path, dry_run, start=None, stop=None, jobs=1):
             called["roots"] = roots
             called["dry_run"] = dry_run
             called["start"] = start
             called["stop"] = stop
+            called["config_path"] = config_path
+            called["jobs"] = jobs
 
         def run(self):
             class R:
@@ -112,11 +114,13 @@ def test_import_forwards_time_bounds(tmp_path: Path, monkeypatch):
     called: dict = {}
 
     class FakeRunner:
-        def __init__(self, _cfg, *, roots, dry_run, start, stop):
+        def __init__(self, _cfg, *, roots, config_path, dry_run, start, stop, jobs=1):
             called["roots"] = roots
             called["dry_run"] = dry_run
             called["start"] = start
             called["stop"] = stop
+            called["config_path"] = config_path
+            called["jobs"] = jobs
 
         def run(self):
             class R:
@@ -139,3 +143,37 @@ def test_import_forwards_time_bounds(tmp_path: Path, monkeypatch):
     assert rc == 0
     assert called["start"] == datetime(2026, 4, 18, 8, 0, 0, tzinfo=timezone.utc)
     assert called["stop"] == datetime(2026, 4, 18, 12, 0, 0, tzinfo=timezone.utc)
+
+
+def test_import_forwards_jobs(tmp_path: Path, monkeypatch):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[influx]\nbucket = 'pyric'\n")
+    hive = tmp_path / "logger=L" / "session=S"
+    hive.mkdir(parents=True)
+    called: dict = {}
+
+    class FakeRunner:
+        def __init__(self, _cfg, *, roots, config_path, dry_run, start=None, stop=None, jobs=1):
+            called["jobs"] = jobs
+            called["config_path"] = config_path
+
+        def run(self):
+            class R:
+                failed_sessions = 0
+
+            return R()
+
+    monkeypatch.setattr("pyric_static.cli.ImportRunner", FakeRunner)
+    rc = import_main(["--config", str(cfg), "--jobs", "4", str(hive)])
+    assert rc == 0
+    assert called["jobs"] == 4
+    assert called["config_path"] == cfg
+
+
+def test_import_rejects_invalid_jobs(tmp_path: Path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text("[influx]\nbucket = 'pyric'\n")
+    hive = tmp_path / "logger=L" / "session=S"
+    hive.mkdir(parents=True)
+    with pytest.raises(SystemExit):
+        import_main(["--config", str(cfg), "--jobs", "0", str(hive)])

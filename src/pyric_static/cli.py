@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -127,20 +128,32 @@ def import_main(argv: list[str] | None = None) -> int:
         metavar="TIME",
         help="exclusive upper bound (ISO 8601; date-only = local midnight); requires --start",
     )
+    parser.add_argument(
+        "--jobs",
+        type=int,
+        default=None,
+        metavar="N",
+        help="parallel worker count for session import (default: CPU count)",
+    )
     args = parser.parse_args(argv)
     if (args.start is None) != (args.stop is None):
         parser.error("--start and --stop must be given together")
     if args.start is not None and args.start >= args.stop:
         parser.error("--start must be before --stop")
+    jobs = args.jobs if args.jobs is not None else (os.cpu_count() or 4)
+    if jobs < 1:
+        parser.error("--jobs must be >= 1")
     _install_logging(args.log_level)
     try:
         cfg = load(args.config)
         stats = ImportRunner(
             cfg,
             roots=list(args.roots),
+            config_path=args.config,
             dry_run=args.dry_run,
             start=args.start,
             stop=args.stop,
+            jobs=jobs,
         ).run()
         return 1 if stats.failed_sessions else 0
     except Exception:  # noqa: BLE001

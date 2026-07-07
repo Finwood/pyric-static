@@ -47,6 +47,11 @@ class RunMetrics:
     def note_deserialize_failed(self, type_str: str) -> None:
         self.deserialize_failed[type_str] += 1
 
+    def merge(self, other: RunMetrics) -> None:
+        self.unresolved_subject.update(other.unresolved_subject)
+        self.unlisted_node.update(other.unlisted_node)
+        self.deserialize_failed.update(other.deserialize_failed)
+
     def summary_lines(self) -> list[str]:
         """Human-readable lines for final log output."""
 
