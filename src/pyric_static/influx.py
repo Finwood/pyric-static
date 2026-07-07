@@ -11,7 +11,6 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any, cast
 
 import pycyphal.dsdl
@@ -24,7 +23,7 @@ from .flatten import flatten
 
 _logger = logging.getLogger(__name__)
 
-# Delete API calls can exceed the InfluxDB client's default 10s timeout under load.
+# Import API calls can exceed the InfluxDB client's default 10s timeout under load.
 _IMPORT_TIMEOUT_MS = 120_000
 
 
@@ -76,30 +75,6 @@ class InfluxWriter:
             cfg.influx.bucket,
         )
         return cls(bucket=cfg.influx.bucket, client=client, writer=writer)
-
-    def delete_range(
-        self,
-        *,
-        logger: str,
-        session: str,
-        start: datetime,
-        stop: datetime,
-    ) -> None:
-        predicate = f'logger="{logger}" AND session="{session}"'
-        self.client.delete_api().delete(
-            start=start,
-            stop=stop,
-            predicate=predicate,
-            bucket=self.bucket,
-            org=self.client.org,
-        )
-        _logger.info(
-            "Influx delete: logger=%s session=%s start=%s stop=%s",
-            logger,
-            session,
-            start.isoformat(),
-            stop.isoformat(),
-        )
 
     def close(self) -> None:
         try:

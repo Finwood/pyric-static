@@ -143,12 +143,11 @@ pyric-static import --config pyric-static.toml \
   --start 2026-04-18T08:00:00 --stop 2026-04-18T12:00:00 /mnt/data/transfers
 ```
 
-Date-only values map to `00:00:00` local on that date. Filtered import deletes and
-re-uploads only within the window (idempotent partial re-import).
+Date-only values map to `00:00:00` local on that date. Filtered import uploads only
+within the window. Re-importing the same points overwrites existing data in place
+(same measurement, tags, and timestamp).
 
-Before uploading each `(logger, session)`, existing Influx points with matching tags
-in the parquet time range are deleted. Only `Message` transfers are written (same
-as live mode).
+Only `Message` transfers are written (same as live mode).
 
 ## Tests
 

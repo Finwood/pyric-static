@@ -16,7 +16,6 @@ from .config import Config, NodeMeta, load
 from .influx import InfluxWriter
 from .metrics import RunMetrics
 from .transfers import (
-    delete_stop_exclusive,
     discover_sessions,
     filter_session_files,
     iter_transfer_batches,
@@ -137,12 +136,13 @@ def _import_session(
             )
             result.skipped = True
             return result
-        t_min, t_max, t_stop = start, stop, stop
+        t_min, t_max = start, stop
     else:
-        t_min, t_max = scan_session_time_range(files)
-        t_stop = delete_stop_exclusive(t_max)
+        t_min, t_max = None, None
 
     if dry_run:
+        if t_min is None or t_max is None:
+            t_min, t_max = scan_session_time_range(files)
         _logger.info(
             "dry-run: logger=%s session=%s files=%d range=%s..%s",
             logger,
@@ -151,9 +151,6 @@ def _import_session(
             t_min.isoformat(),
             t_max.isoformat(),
         )
-    else:
-        assert writer is not None
-        writer.delete_range(logger=logger, session=session, start=t_min, stop=t_stop)
 
     read_kwargs: dict = {}
     if start is not None and stop is not None:

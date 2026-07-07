@@ -110,9 +110,7 @@ def import_main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pyric-static import")
     parser.add_argument("--log-level", default="INFO")
     parser.add_argument("--config", required=True, type=Path, help="path to TOML config (influx, nodes)")
-    parser.add_argument(
-        "--dry-run", action="store_true", help="decode messages but do not delete or write to Influx"
-    )
+    parser.add_argument("--dry-run", action="store_true", help="decode messages but do not write to Influx")
     parser.add_argument("roots", nargs="+", type=Path, help="hive root(s) containing transfer parquet files")
     parser.add_argument(
         "--start",

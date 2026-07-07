@@ -116,7 +116,7 @@ def test_import_filtered_dry_run_skips_outside_window(tmp_path: Path, config_pat
     assert stats.written == 1
 
 
-def test_import_filtered_calls_delete_with_window(tmp_path: Path, config_path: Path, monkeypatch):
+def test_import_filtered_writes_within_window(tmp_path: Path, config_path: Path, monkeypatch):
     spec = PortSpec(port_id=7509, port_name="heartbeat", type_str="uavcan.node.Heartbeat.1.0", dtype=object)
     cfg = Config(
         logger=None,
@@ -148,7 +148,7 @@ def test_import_filtered_calls_delete_with_window(tmp_path: Path, config_path: P
     stop = datetime(2026, 4, 18, 11, 0, 0, tzinfo=timezone.utc)
     mock_writer = MagicMock()
     with patch("pyric_static.import_app.InfluxWriter.from_import", return_value=mock_writer):
-        ImportRunner(
+        stats = ImportRunner(
             cfg,
             roots=[root],
             config_path=config_path,
@@ -157,12 +157,8 @@ def test_import_filtered_calls_delete_with_window(tmp_path: Path, config_path: P
             stop=stop,
             jobs=1,
         ).run()
-    mock_writer.delete_range.assert_called_once()
-    kwargs = mock_writer.delete_range.call_args.kwargs
-    assert kwargs["start"] == start
-    assert kwargs["stop"] == stop
-    assert kwargs["logger"] == "L"
-    assert kwargs["session"] == "S"
+    mock_writer.write_message.assert_called_once()
+    assert stats.written == 1
 
 
 def test_import_parallel_dry_run_two_sessions(tmp_path: Path, config_path: Path, monkeypatch):

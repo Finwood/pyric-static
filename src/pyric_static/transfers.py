@@ -6,7 +6,7 @@ import logging
 import re
 from collections import defaultdict
 from collections.abc import Iterator, Sequence
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -147,10 +147,6 @@ def scan_session_time_range(files: Sequence[Path]) -> tuple[datetime, datetime]:
     if t_min is None or t_max is None:
         raise ValueError("session has no timestamp rows")
     return t_min, t_max
-
-
-def delete_stop_exclusive(t_max: datetime) -> datetime:
-    return t_max + timedelta(microseconds=1)
 
 
 def iter_transfer_batches(
